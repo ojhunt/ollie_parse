@@ -1,7 +1,7 @@
 if (this.console) {
-  log = (...msg) => console.log(...msg)
+  log = (...msg) => console.log(...msg);
 } else {
-  log = print
+  log = print;
 }
 class Source {
   constructor(trueSource) {
@@ -10,11 +10,11 @@ class Source {
   }
   get(offset) { return this.$trueSource[offset]; }
   get text() { return this.$trueSource; }
-  position(offset) { 
+  position(offset) {
     if (!this.$lineInfo) {
       let lineInfo = [0];
       for (let i = 1; i < this.$trueSource.length; i++) {
-        if (this.$trueSource[i-1]=='\n') lineInfo.push(i);
+        if (this.$trueSource[i - 1] == '\n') lineInfo.push(i);
       }
       this.$lineInfo = lineInfo;
     }
@@ -30,12 +30,12 @@ class Source {
   }
 }
 class Token {
-  constructor({source, rule, offset, text}) {
-    this.source=source;
-    this.offset=offset;
-    this.text=text;
-    this.value=text;
-    this.rule=rule;
+  constructor({ source, rule, offset, text, value }) {
+    this.source = source;
+    this.offset = offset;
+    this.text = text;
+    this.value = value;
+    this.rule = rule;
     Object.freeze(this);
   }
   get position() {
@@ -44,35 +44,35 @@ class Token {
 }
 class LexerCompiler {
 
-  constructor({ name, unicode = true}) {
+  constructor({ name, unicode = true }) {
     this.name = name;
     this.$rules = [];
     this.$unicode = unicode;
   }
-  addRule(name, rule, callback = (text, ruleName)=>text) {
-    this.$rules.push({ name, rule, callback, isLiteral: undefined })
+  addRule(name, rule, callback = (text, ruleName) => text) {
+    this.$rules.push({ name, rule, callback, shouldIgnore: false, isLiteral: undefined });
   }
-  addIgnoreRule(rule) {
-    this.$rules.push({ name: `ignore(${rule})`, rule, callback: _=>null, isLiteral: undefined })
+  addIgnoreRule(name, rule) {
+    this.$rules.push({ name, rule, callback: null, shouldIgnore: true, isLiteral: undefined });
   }
   compile() {
-    function fixupRule({ name, rule, callback, isLiteral }) {
+    function fixupRule({ name, rule, callback, shouldIgnore, isLiteral }) {
       let ruleSource;
       let flags = "";
       if (rule instanceof RegExp) {
-        ruleSource = rule.source
+        ruleSource = rule.source;
         isLiteral = isLiteral || false;
         if (rule.flags.indexOf("m") >= 0)
-          flags = "m"
+          flags = "m";
       } else {
         // "escape" control characters
         ruleSource = "" + rule;
         ruleSource = ruleSource.replace(/[\.\*\!\(\)\+\{\}\?\\\[\]]/g, x => `\\${x}`);
         isLiteral = true;
       }
-      return { name, regexp: new RegExp(`^${ruleSource}`, flags), callback, isLiteral };
+      return { name, regexp: new RegExp(`^${ruleSource}`, flags), callback, shouldIgnore, isLiteral };
     }
-    this.$rules = this.$rules.map(rule => Object.freeze(fixupRule(rule)))
+    this.$rules = this.$rules.map(rule => Object.freeze(fixupRule(rule)));
     Object.freeze(this);
     Object.freeze(this.$rules);
   }
@@ -87,28 +87,18 @@ class LexerCompiler {
 }
 
 class Lexer {
-  constructor({name, rules, input}) {
+  constructor({ name, rules, input }) {
     this.name = name;
     this.$rules = rules;
     this.$input = input;
     this.$source = new Source(input);
-    this.$tokenBuffer = [];
     this.$offset = 0;
     this.$currentToken = null;
     this.$eofTag = Object.freeze({});
     this.next();
   }
   get currentToken() { return this.$currentToken; }
-  next() {
-    if (this.$tokenBuffer.length) {
-      this.$currentToken = this.$tokenBuffer.pop();
-      if (this.$tokenBuffer.length) {
-        this.$offset = this.$tokenBuffer[0].position;
-      } else {
-        this.$offset = this.$currentToken.position + this.$currentToken.length;
-      }
-      return;
-    }
+  $next(shouldEvaluate) {
     if (this.$offset == this.$input.length) {
       this.$currentToken = this.$eofTag;
       return;
@@ -119,11 +109,11 @@ class Lexer {
     // This relies on the engine being smart enough to use slices/ropes
     // for substringing.
     let currentString = this.$input.substring(this.$offset);
-   
+
     for (let rule of this.$rules) {
       let matches = rule.regexp.exec(currentString);
       if (!matches)
-          continue;
+        continue;
       let thisText = matches[0];
       if (thisText.length > currentMaxLength) {
         currentText = thisText;
@@ -132,7 +122,7 @@ class Lexer {
       } else if (thisText.length == currentMaxLength) {
         if (rule.isLiteral) {
           if (currentRule.isLiteral)
-             throw "Duplicate rule";
+            throw "Duplicate rule";
           currentRule = rule;
         }
       }
@@ -140,47 +130,54 @@ class Lexer {
     if (!currentRule) {
       throw `Invalid token '${this.$input[this.$offset]}' at ${this.$offset}`;
     }
-    let value = currentRule.callback(currentRule.name, currentText);
     let currentOffset = this.$offset;
     this.$offset += currentMaxLength;
-    if (value === null) {
-      this.next();
+    if (currentRule.shouldIgnore) {
+      this.$next(shouldEvaluate);
       return;
     }
+    let value = shouldEvaluate ? currentRule.callback(currentText, currentRule.name) : null;
+
     let token = new Token(
       { source: this.$source, rule: currentRule.name, offset: currentOffset, text: currentText, value }
-    )
+    );
     Object.freeze(token);
     this.$currentToken = token;
   }
+  next() {
+    return this.$next(true);
+  }
   hasNext() {
     if (this.$currentToken === this.$eofTag)
-       return false;
-    return this.peek(1) !== null;  
+      return false;
+    return this.$peek(1) !== null;
   }
-  peek(count) {
-    "use strict"
-    if (count === 0) throw "peek lookahead must be greater than 0"
-    let trueToken = this.$currentToken
+  $peek(count, shouldEvaluate) {
+    "use strict";
+    if (count === 0) throw "peek lookahead must be greater than 0";
+    let trueToken = this.$currentToken;
     const trueOffset = this.$offset;
     for (let i = 0; i < count; i++) {
-      this.next();
+      this.$next(shouldEvaluate);
     }
     let result = this.$currentToken;
     this.$currentToken = trueToken;
     this.$offset = trueOffset;
-    
+
     if (result === this.$eofTag) {
       return null;
     }
     return result;
+  }
+  peek(count) {
+    return this.$peek(count, true);
   }
   get token() {
     if (this.$currentToken == this.$eofTag)
       return null;
     return this.$currentToken;
   }
-  *tokens(){
+  *tokens() {
     while (this.currentToken !== this.$eofTag) {
       yield this.currentToken;
       this.next();
