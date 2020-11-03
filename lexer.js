@@ -27,16 +27,19 @@ class LexerCompiler {
   compile() {
     function fixupRule({ name, rule, callback, isLiteral }) {
       let ruleSource;
+      let flags = "";
       if (rule instanceof RegExp) {
         ruleSource = rule.source
         isLiteral = isLiteral || false;
+        if (rule.flags.indexOf("m") >= 0)
+          flags = "m"
       } else {
         // "escape" control characters
         ruleSource = "" + rule;
         ruleSource = ruleSource.replace(/[\.\*\!\(\)\+\{\}\?\\\[\]]/g, x => `\\${x}`);
         isLiteral = true;
       }
-      return { name, regexp: new RegExp(`^${ruleSource}`, "m"), callback, isLiteral };
+      return { name, regexp: new RegExp(`^${ruleSource}`, flags), callback, isLiteral };
     }
     this.$rules = this.$rules.map(rule => Object.freeze(fixupRule(rule)))
     Object.freeze(this);
@@ -116,7 +119,6 @@ class Lexer {
     )
     Object.freeze(token);
     this.$currentToken = token;
-    log(this.$offset)
   }
   hasNext() {
     if (this.$currentToken === this.$eofTag)
