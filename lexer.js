@@ -3,16 +3,47 @@ if (this.console) {
 } else {
   log = print
 }
+class Source {
+  constructor(trueSource) {
+    this.$trueSource = trueSource;
+    this.$lineInfo = null;
+  }
+  get(offset) { return this.$trueSource[offset]; }
+  get text() { return this.$trueSource; }
+  position(offset) { 
+    if (!this.$lineInfo) {
+      let lineInfo = [0];
+      for (let i = 1; i < this.$trueSource.length; i++) {
+        if (this.$trueSource[i-1]=='\n') lineInfo.push(i);
+      }
+      this.$lineInfo = lineInfo;
+    }
+    let line = this.$lineInfo.length - 1;
+    for (let i = 1; i < this.$lineInfo.length; i++) {
+      if (this.$lineInfo[i] > offset) {
+        line = i - 1;
+        break;
+      }
+    }
+    let column = offset - this.$lineInfo[line];
+    return [line, column];
+  }
+}
 class Token {
-  constructor({source, rule, position, text}) {
+  constructor({source, rule, offset, text}) {
     this.source=source;
-    this.position=position;
+    this.offset=offset;
     this.text=text;
     this.value=text;
     this.rule=rule;
+    Object.freeze(this);
+  }
+  get position() {
+    return this.source.position(this.offset);
   }
 }
 class LexerCompiler {
+
   constructor({ name, unicode = true}) {
     this.name = name;
     this.$rules = [];
@@ -60,6 +91,7 @@ class Lexer {
     this.name = name;
     this.$rules = rules;
     this.$input = input;
+    this.$source = new Source(input);
     this.$tokenBuffer = [];
     this.$offset = 0;
     this.$currentToken = null;
@@ -109,13 +141,14 @@ class Lexer {
       throw `Invalid token '${this.$input[this.$offset]}' at ${this.$offset}`;
     }
     let value = currentRule.callback(currentRule.name, currentText);
+    let currentOffset = this.$offset;
     this.$offset += currentMaxLength;
     if (value === null) {
       this.next();
       return;
     }
     let token = new Token(
-      { source: this.$input, rule: currentRule.name, position: this.$offset, text: currentText, value }
+      { source: this.$source, rule: currentRule.name, offset: currentOffset, text: currentText, value }
     )
     Object.freeze(token);
     this.$currentToken = token;

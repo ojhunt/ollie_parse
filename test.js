@@ -28,7 +28,7 @@ function test2() {
 function test3() {
     let lexer = compiler.createLexer("foo /* foo */ bar /* /* */ wibble");
     for (let token of lexer.tokens()) {
-        log(`Token[${token.rule}]: ${token.text}`)
+        log(`Token[${token.rule}]@${token.position}: ${token.text}`)
     }
 }
 
@@ -36,18 +36,18 @@ function test3() {
 function test4() {
     let lexer = compiler.createLexer("foo // bar\nwibble");
     for (let token of lexer.tokens()) {
-        log(`Token[${token.rule}]: ${token.text}`)
+        log(`Token[${token.rule}]@${token.position}: ${token.text}`)
     }
 }
 function test5() {
     let lexer = compiler.createLexer("foo /* bar\nwibb*/le");
     for (let token of lexer.tokens()) {
-        log(`Token[${token.rule}]: ${token.text}`)
+        log(`Token[${token.rule}]@${token.position}: ${token.text}`)
     }
 }
 
-// test1();
-// test2();
-// test3();
+test1();
+test2();
+test3();
 test4();
 test5();
