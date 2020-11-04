@@ -26,7 +26,7 @@ class Source {
       }
     }
     let column = offset - this.$lineInfo[line];
-    return [line, column];
+    return [line + 1, column + 1];
   }
 }
 class Token {
