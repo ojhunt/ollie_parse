@@ -70,7 +70,7 @@ class LexerCompiler {
         ruleSource = ruleSource.replace(/[\.\*\!\(\)\+\{\}\?\\\[\]]/g, x => `\\${x}`);
         isLiteral = true;
       }
-      return { name, regexp: new RegExp(`^${ruleSource}`, flags), callback, shouldIgnore, isLiteral };
+      return { name, regexp: new RegExp(`^(?:${ruleSource})`, flags), callback, shouldIgnore, isLiteral };
     }
     this.$rules = this.$rules.map(rule => Object.freeze(fixupRule(rule)));
     Object.freeze(this);
@@ -128,7 +128,7 @@ class Lexer {
       }
     }
     if (!currentRule) {
-      throw `Invalid token '${this.$input[this.$offset]}' at ${this.$offset}`;
+      throw `Invalid token '${this.$input[this.$offset]}' at ${this.$source.position(this.$offset).join(":")}`;
     }
     let currentOffset = this.$offset;
     this.$offset += currentMaxLength;
