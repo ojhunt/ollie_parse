@@ -31,31 +31,62 @@ if (this.load) load("lexer.js");
   set_element : [\S\s]+ | ([\S\s] "-" [\S\s])
 */
 
-class StringTerminal {
+class ASTNode {
+  constructor() {
+    this.nodeName = this.constructor.name;
+  }
+}
+class StringTerminal extends ASTNode {
+  constructor(value) {
+    super();
+    this.value = value;
+  }
 
 }
-class IdentTerminal {
+class IdentTerminal extends ASTNode {
+  constructor(value) {
+    super();
+    this.value = value;
+  }
 
 }
-class SetTerminal {
-
+class SetTerminal extends ASTNode {
+  constructor(value) {
+    super();
+    this.value = value;
+  }
 }
 
-class Component {
+class Component extends ASTNode {
+  constructor({ element, suffixes }) {
+    super();
+    this.element = element;
+    this.suffixes = suffixes;
+  }
+}
+class Production extends ASTNode {
+  constructor({ name, rules }) {
+    super();
+    this.name = name;
+    this.rules = rules;
+  }
+}
+class CompoundElement extends ASTNode {
+  constructor(rules) {
+    super();
+    this.rules = rules;
+  }
+}
+
+class StarSuffix extends ASTNode {
 
 }
-class Production {
-
-}
-class CompoundElement {
-
-}
-
-class StarSuffix {
-
-}
-class Grammar {
-
+class Grammar extends ASTNode {
+  constructor({ name, productions }) {
+    super();
+    this.name = name;
+    this.productions = productions;
+  }
 }
 
 let bootstrapParser = function () {
