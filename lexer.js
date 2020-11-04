@@ -67,7 +67,7 @@ class LexerCompiler {
       } else {
         // "escape" control characters
         ruleSource = "" + rule;
-        ruleSource = ruleSource.replace(/[\.\*\!\(\)\+\{\}\?\\\[\]]/g, x => `\\${x}`);
+        ruleSource = ruleSource.replace(/[\.\*\!\(\)\+\{\}\?\\\|\[\]]/g, x => `\\${x}`);
         isLiteral = true;
       }
       return { name, regexp: new RegExp(`^(?:${ruleSource})`, flags), callback, shouldIgnore, isLiteral };

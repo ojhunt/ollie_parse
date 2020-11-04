@@ -26,68 +26,155 @@ if (this.load) load("lexer.js");
   component : (element element_suffix*)?
   element_suffix: "*" | "?" | "{" number ("," number)? "}"
   element : terminal | "(" rule_list ")"
-  terminal : ident | number | string | set
+  terminal : ident | number | (string+) | set
   set : "[" "^"? set_element+ "]" 
   set_element : [\S\s]+ | ([\S\s] "-" [\S\s])
 */
+
+class Visitor {
+  visitStringTerminalNode(node) { }
+  visitIdentTerminalNode(node) { }
+  visitSetTerminalNode(node) { }
+  visitGrammarNode(node) {
+    for (let production of node.productions)
+      production.visit(this);
+  }
+  visitComponentNode(node) {
+    node.element.visit(this);
+    for (let suffix of node.suffixes)
+      suffix.visit(this);
+  }
+  visitProductionNode(node) {
+    for (let rule of node.rules)
+      rule.visit(this);
+  }
+  visitCompoundElementNode(node) {
+    for (let rule of node.rules)
+      rule.visit(this);
+  }
+  visitRuleNode(node) {
+    for (let component of node.components)
+      component.visit(this);
+  }
+  visitZeroOrMoreSuffixNode(node) { }
+  visitOneOrMoreSuffixNode(node) { }
+  visitOptionalSuffixNode(node) { }
+  visitRangeSuffixNode(node) { }
+}
 
 class ASTNode {
   constructor() {
     this.nodeName = this.constructor.name;
   }
+  visit(visitor) {
+    visitor[`visit${this.nodeName}`](this);
+  }
 }
-class StringTerminal extends ASTNode {
+class StringTerminalNode extends ASTNode {
+  constructor(value) {
+    super();
+    this.value = value;
+  }
+}
+class IdentTerminalNode extends ASTNode {
   constructor(value) {
     super();
     this.value = value;
   }
 
 }
-class IdentTerminal extends ASTNode {
-  constructor(value) {
-    super();
-    this.value = value;
-  }
-
-}
-class SetTerminal extends ASTNode {
+class SetTerminalNode extends ASTNode {
   constructor(value) {
     super();
     this.value = value;
   }
 }
 
-class Component extends ASTNode {
+class ComponentNode extends ASTNode {
   constructor({ element, suffixes }) {
     super();
     this.element = element;
     this.suffixes = suffixes;
   }
 }
-class Production extends ASTNode {
+class ProductionNode extends ASTNode {
   constructor({ name, rules }) {
     super();
     this.name = name;
     this.rules = rules;
   }
 }
-class CompoundElement extends ASTNode {
+class CompoundElementNode extends ASTNode {
   constructor(rules) {
     super();
     this.rules = rules;
   }
 }
-
-class StarSuffix extends ASTNode {
-
+class RuleNode extends ASTNode {
+  constructor(components) {
+    super();
+    this.components = components;
+  }
 }
-class Grammar extends ASTNode {
+
+class RangeSuffixNode extends ASTNode {
+  constructor({ lowerCount, upperCount }) {
+    super();
+    this.lowerCount = lowerCount;
+    this.upperCount = upperCount;
+  }
+}
+class ZeroOrMoreSuffixNode extends RangeSuffixNode {
+  constructor() {
+    super(0, null);
+  }
+}
+class OneOrMoreSuffixNode extends RangeSuffixNode {
+  constructor() {
+    super(1, null);
+  }
+}
+class OptionalSuffixNode extends RangeSuffixNode {
+  constructor() {
+    super(0, 1);
+  }
+}
+
+class GrammarNode extends ASTNode {
   constructor({ name, productions }) {
     super();
     this.name = name;
     this.productions = productions;
   }
 }
+class ParserGenerator {
+  constructor(ast) {
+    assert(ast instanceof GrammarNode);
+    class TerminalFinder extends Visitor {
+      constructor() {
+        super();
+        this.terminalSet = new Set;
+      }
+      visitStringTerminalNode(node) {
+        this.terminalSet.add(node);
+      }
+      visitIdentTerminalNode(node) {
+        this.terminalSet.add(node);
+      }
+      visitSetTerminalNode(node) {
+        this.terminalSet.add(node);
+      }
+      get terminals() { return [...this.terminalSet]; }
+    }
+    let finder = new TerminalFinder;
+    ast.visit(finder);
+    let terminals = finder.terminals.map(a => a.value);
+    log(terminals);
+    let productions = findProductions(ast);
+  }
+}
+
+
 
 let bootstrapParser = function () {
   let lexerBuilder = new LexerCompiler("OPLexer");
@@ -108,8 +195,14 @@ let bootstrapParser = function () {
     `}`,
     `(`,
     `)`,
+    `<`,
+    `>`,
     `:`,
     `*`,
+    `|`,
+    `,`,
+    `?`,
+    `+`,
     "grammar",
   ];
   for (rule of rules) {
@@ -124,10 +217,19 @@ let bootstrapParser = function () {
   }
   lexerBuilder.compile();
   lexer = lexerBuilder.createLexer(
-    `grammar LanguageGrammar {
-    gramma_head: "grammar" ident "{" grammar_definitions "}";
-    grammar_definitions: (production)*;
-    production: ident ":" rule_list;
+    `
+      grammar OPLanguageGrammar {
+      grammar_head : "grammar" ident "{" grammar_definitions "}";
+      grammar_definitions : (production)*;
+      production : ident ":" rule_list;
+      rule_list : rule ("|" rule)*;
+      rule : component*;
+      component : (element element_suffix*)?;
+      element_suffix: "*" | "?" | "{" number ("," number)? "}";
+      element : terminal | "(" rule_list ")";
+      terminal : ident | number | (string+) | set;
+      set : "[" "^"? set_element+ "]" ;
+      set_element : [\\S\\s]+ | ([\\S\\s] "-" [\\S\\s]);
     }
     `
   );
@@ -144,7 +246,6 @@ let bootstrapParser = function () {
     if (!match(rule))
       return null;
     let result = lexer.currentToken;
-    log([result.rule, result.text]);
     lexer.next();
     return result;
   }
@@ -156,7 +257,7 @@ let bootstrapParser = function () {
     consume("{");
     let grammarBody = parseGrammarDefinitions();
     consume("}");
-    return new Grammar({ name: grammarName, productions: grammarBody });
+    return new GrammarNode({ name: grammarName, productions: grammarBody });
   }
 
   // grammar_definitions: (production) *
@@ -170,18 +271,19 @@ let bootstrapParser = function () {
 
   // production : ident ":" rule_list;
   function parseProduction() {
-    let productionName = consume("ident");
+    let productionName = consume("ident").value;
     consume(":");
     let rules = parseRuleList();
     consume(";");
-    return new Production({ name: productionName, rules });
+    return new ProductionNode({ name: productionName, rules });
   }
 
   // rule_list: rule("|" rule) *
   function parseRuleList() {
     let rules = [parseRule()];
-    while (match("|"))
+    while (tryConsume("|")) {
       rules.push(parseRule());
+    }
     return rules;
   }
 
@@ -192,10 +294,10 @@ let bootstrapParser = function () {
     while (!match("|") && !match(";") && !match(")")) {
       components.push(parseComponent());
     }
-    return components;
+    return new RuleNode(components);
   }
 
-  // component : (element element_suffix *)?
+  // component : (element element_suffix *)? action?
   function parseComponent() {
     // Followset is | and ;
     if (match("|") || match(";") || match(")"))
@@ -206,44 +308,68 @@ let bootstrapParser = function () {
     while (suffix = parseElementSuffix()) {
       suffixes.push(suffix);
     }
-    return new Component({ element, suffixes });
+    let action = tryConsume("action");
+    return new ComponentNode({ element, suffixes, action });
   }
 
   // element: terminal | "(" rule_list ")";
   function parseElement() {
     if (tryConsume("(")) {
-      let result = new CompoundElement(parseRuleList());
+      let result = new CompoundElementNode(parseRuleList());
       consume(")");
       return result;
     }
     return parseTerminal();
   }
+
   // element_suffix: "*" | "?" | "{" number("," number?) ? "}"
   function parseElementSuffix() {
-    if (tryConsume("*")) return new StarSuffix();
-    if (tryConsume("?")) return new OptionalSuffix();
+    if (tryConsume("*")) return new ZeroOrMoreSuffixNode();
+    if (tryConsume("+")) return new OneOrMoreSuffixNode();
+    if (tryConsume("?")) return new OptionalSuffixNode();
     if (tryConsume("{")) {
-      let lowerBound = consume("number");
+      let lowerCount = consume("number").value;
       let isRange = false;
+      let upperCount = null;
       if (tryConsume(",")) {
         range = true;
-        let upperBound = consume(number);
+        let number = tryConsume("number");
+        if (number)
+          upperCount = number.value;
+      } else {
+        upperCount = lowerCount;
       }
-      if (!lowerBound && !upperBound)
-        throw "Invalid matching range";
       consume("}");
-      return new RangeSuffix({ lowerBound, upperBound, isRange });
+      return new RangeSuffixNode({ lowerCount, upperCount });
     }
   }
   // terminal: ident | number | string | set;
   function parseTerminal() {
     switch (lexer.currentToken.rule) {
-      case "ident": return new IdentTerminal(consume("ident").value);
-      case "number": return new NumberTerminal(consume("number").value);
-      case "string": return new StringTerminal(consume("string").value);
+      case "ident": return cachedTerminal(IdentTerminalNode, consume("ident").value);
+      case "number": return cachedTerminal(NumberTerminalNode, consume("number").value);
+      case "string": return cachedTerminal(StringTerminalNode, consume("string").value);
     }
-    return new SetTerminal(consume("set").value);
+    return cachedTerminal(SetTerminalNode, consume("set").value);
+  }
+  let terminalCache = new Map;
+  function cachedTerminal(nodeConstructor, value) {
+    let theCache = terminalCache.get(nodeConstructor);
+    if (!theCache) {
+      theCache = new Map;
+      terminalCache.set(nodeConstructor, theCache);
+    }
+    let cachedResult = theCache.get(value);
+    if (cachedResult)
+      return cachedResult;
+    let newEntry = new nodeConstructor(value);
+    theCache.set(value, newEntry);
+    return newEntry;
   }
   let grammarAST = parseGrammar();
   log(JSON.stringify(grammarAST, null, "  "));
+  let generator = new ParserGenerator(grammarAST);
 }();
+function assert(e) {
+  if (!e) throw "assertion failed";
+}
