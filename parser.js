@@ -1,5 +1,5 @@
 if (this.load) load("lexer.js");
-
+print = null;
 
 
 /*
@@ -170,7 +170,8 @@ class ParserGenerator {
     ast.visit(finder);
     let terminals = finder.terminals.map(a => a.value);
     log(terminals);
-    let productions = findProductions(ast);
+    let productions = ast.productions.map(p => p.name);
+    log(productions);
   }
 }
 
@@ -203,6 +204,7 @@ let bootstrapParser = function () {
     `,`,
     `?`,
     `+`,
+    `~`,
     "grammar",
   ];
   for (rule of rules) {
@@ -224,9 +226,11 @@ let bootstrapParser = function () {
       production : ident ":" rule_list;
       rule_list : rule ("|" rule)*;
       rule : component*;
-      component : (element element_suffix*)?;
+      component : (code_segment "?")? code_segment? ((ident "=")? element element_suffix*)?;
+      code_segment : "{" code_body "}";
+      code_body : ((~"}") | code_segment)*;
       element_suffix: "*" | "?" | "{" number ("," number)? "}";
-      element : terminal | "(" rule_list ")";
+      element : terminal | "(" [?~]? rule_list ")";
       terminal : ident | number | (string+) | set;
       set : "[" "^"? set_element+ "]" ;
       set_element : [\\S\\s]+ | ([\\S\\s] "-" [\\S\\s]);
@@ -296,9 +300,19 @@ let bootstrapParser = function () {
     }
     return new RuleNode(components);
   }
-
-  // component : (element element_suffix *)? action?
+  // component : (code_segment "?")? code_segment? ((ident "=")? element element_suffix*)? code_segment? ;
   function parseComponent() {
+    let predicate = null;
+    let prefixAction = null;
+    if (match("{")) {
+      prefixAction = parseCodeblock();
+      if (tryConsume("?")) {
+        predicate = prefixAction;
+        prefixAction = null;
+        if (match("{"))
+          prefixAction = parseCodeblock();
+      }
+    }
     // Followset is | and ;
     if (match("|") || match(";") || match(")"))
       return null;
@@ -308,8 +322,9 @@ let bootstrapParser = function () {
     while (suffix = parseElementSuffix()) {
       suffixes.push(suffix);
     }
-    let action = tryConsume("action");
-    return new ComponentNode({ element, suffixes, action });
+    let post;
+    if (match("{"))
+      return new ComponentNode({ predicate, prefixCodeBlock, postfixCodeblock, element, suffixes, action });
   }
 
   // element: terminal | "(" rule_list ")";
