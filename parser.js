@@ -60,6 +60,9 @@ class Visitor {
   visitOneOrMoreSuffixNode(node) { }
   visitOptionalSuffixNode(node) { }
   visitRangeSuffixNode(node) { }
+  visitNegateElementNode(node) {
+    node.node.visit(this);
+  }
 }
 
 class ASTNode {
@@ -108,6 +111,12 @@ class CompoundElementNode extends ASTNode {
   constructor(rules) {
     super();
     this.rules = rules;
+  }
+}
+class NegateElementNode extends ASTNode {
+  constructor(node) {
+    super();
+    this.node = node;
   }
 }
 class RuleNode extends ASTNode {
@@ -169,9 +178,9 @@ class ParserGenerator {
     let finder = new TerminalFinder;
     ast.visit(finder);
     let terminals = finder.terminals.map(a => a.value);
-    log(terminals);
+    log(`Terminals: ${terminals.map(p => `'${p}'`)}`);
     let productions = ast.productions.map(p => p.name);
-    log(productions);
+    log(`Productions: ${productions}`);
   }
 }
 
@@ -187,7 +196,7 @@ let bootstrapParser = function () {
     ["number", /[0-9]+(?![a-zA-Z_])/],
     ["ident", /[a-zA-Z_][a-zA-Z_0-9]*/],
     ["action", /{{{.*?}}}/m],
-    ["set", /\[[\^]?[\S\s]+?\]/],
+    ["regex", /\[\]|\[[\S\s]*?[^\\]\]/],
     `"`,
     `'`,
     `"`,
@@ -218,25 +227,7 @@ let bootstrapParser = function () {
       lexerBuilder.addIgnoreRule(...rule);
   }
   lexerBuilder.compile();
-  lexer = lexerBuilder.createLexer(
-    `
-      grammar OPLanguageGrammar {
-      grammar_head : "grammar" ident "{" grammar_definitions "}";
-      grammar_definitions : (production)*;
-      production : ident ":" rule_list;
-      rule_list : rule ("|" rule)*;
-      rule : component*;
-      component : (code_segment "?")? code_segment? ((ident "=")? element element_suffix*)?;
-      code_segment : "{" code_body "}";
-      code_body : ((~"}") | code_segment)*;
-      element_suffix: "*" | "?" | "{" number ("," number)? "}";
-      element : terminal | "(" [?~]? rule_list ")";
-      terminal : ident | number | (string+) | set;
-      set : "[" "^"? set_element+ "]" ;
-      set_element : [\\S\\s]+ | ([\\S\\s] "-" [\\S\\s]);
-    }
-    `
-  );
+  lexer = lexerBuilder.createLexer(read("parser.grammar"));
   function match(rule) {
     return lexer.currentToken.rule == rule;
   }
@@ -300,17 +291,17 @@ let bootstrapParser = function () {
     }
     return new RuleNode(components);
   }
-  // component : (code_segment "?")? code_segment? ((ident "=")? element element_suffix*)? code_segment? ;
+  // component : code_segment ? ("?" code_segment?)? ((ident "=")? element element_suffix*)? code_segment? ;
   function parseComponent() {
     let predicate = null;
-    let prefixAction = null;
+    let prefixCodeBlock = null;
     if (match("{")) {
-      prefixAction = parseCodeblock();
+      prefixCodeBlock = parseCodesegment();
       if (tryConsume("?")) {
-        predicate = prefixAction;
-        prefixAction = null;
+        predicate = prefixCodeBlock;
+        prefixCodeBlock = null;
         if (match("{"))
-          prefixAction = parseCodeblock();
+          prefixCodeBlock = parseCodesegment();
       }
     }
     // Followset is | and ;
@@ -322,19 +313,26 @@ let bootstrapParser = function () {
     while (suffix = parseElementSuffix()) {
       suffixes.push(suffix);
     }
-    let post;
+    let postfixCodeblock;
     if (match("{"))
-      return new ComponentNode({ predicate, prefixCodeBlock, postfixCodeblock, element, suffixes, action });
+      postfixCodeblock = parseCodesegment();
+    return new ComponentNode({ predicate, prefixCodeBlock, postfixCodeblock, element, suffixes });
   }
 
-  // element: terminal | "(" rule_list ")";
+  // element: "~"? (terminal | "(" rule_list ")");
   function parseElement() {
+    let wrapper = _ => _;
+    if (tryConsume("~"))
+      wrapper = n => new NegateElementNode(n);
     if (tryConsume("(")) {
       let result = new CompoundElementNode(parseRuleList());
       consume(")");
-      return result;
+      if (!wrapper(result)) throw "";
+      return wrapper(result);
     }
-    return parseTerminal();
+    let terminal = parseTerminal();
+    if (!wrapper(terminal)) throw "";
+    return wrapper(terminal);
   }
 
   // element_suffix: "*" | "?" | "{" number("," number?) ? "}"
@@ -365,7 +363,7 @@ let bootstrapParser = function () {
       case "number": return cachedTerminal(NumberTerminalNode, consume("number").value);
       case "string": return cachedTerminal(StringTerminalNode, consume("string").value);
     }
-    return cachedTerminal(SetTerminalNode, consume("set").value);
+    return cachedTerminal(SetTerminalNode, consume("regex").value);
   }
   let terminalCache = new Map;
   function cachedTerminal(nodeConstructor, value) {
