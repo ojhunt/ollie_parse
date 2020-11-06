@@ -8,6 +8,9 @@ class Source {
     this.$trueSource = trueSource;
     this.$lineInfo = null;
   }
+  substring(start, end) {
+    return this.$trueSource.substring(start, end);
+  }
   get(offset) { return this.$trueSource[offset]; }
   get text() { return this.$trueSource; }
   position(offset) {
@@ -37,6 +40,9 @@ class Token {
     this.value = value;
     this.rule = rule;
     Object.freeze(this);
+  }
+  get length() {
+    return this.text.length;
   }
   get position() {
     return this.source.position(this.offset);
@@ -96,6 +102,10 @@ class Lexer {
     this.$currentToken = null;
     this.$eofTag = Object.freeze({});
     this.next();
+  }
+  getSubstring(start, end) {
+    log(`getSubstring(${start},${end})`);
+    return this.$source.substring(start, end);
   }
   get currentToken() { return this.$currentToken; }
   $next(shouldEvaluate) {

@@ -125,6 +125,12 @@ class RuleNode extends ASTNode {
     this.components = components;
   }
 }
+class CodeSegmentNode extends ASTNode {
+  constructor(source) {
+    super();
+    this.source = source;
+  }
+}
 
 class RangeSuffixNode extends ASTNode {
   constructor({ lowerCount, upperCount }) {
@@ -248,6 +254,9 @@ let bootstrapParser = function () {
     }
     return true;
   }
+  function peek(lookahead) {
+    return lexer.peek(lookahead);
+  }
   function consume(rule) {
     let result = tryConsume(rule);
     if (!result)
@@ -336,9 +345,23 @@ let bootstrapParser = function () {
       suffixes.push(suffix);
     }
     let postfixCodeblock;
-    if (match("{"))
+    if (match("{") && peek(1).rule != "number")
       postfixCodeblock = parseCodesegment();
     return new ComponentNode({ label, predicate, prefixCodeBlock, postfixCodeblock, element, suffixes });
+  }
+
+  function parseCodesegment() {
+    let startToken = consume("{");
+    let endToken;
+    let tokens = [];
+    let depth = 1;
+    while (depth > 0 && lexer.hasNext()) {
+      if (tryConsume("{")) depth++;
+      else if (endToken = tryConsume("}")) depth--;
+      else lexer.next();
+    }
+    let code = lexer.getSubstring(startToken.offset + startToken.length, endToken.offset);
+    return new CodeSegmentNode(code);
   }
 
   // element: "~"? (terminal | "(" rule_list ")");
@@ -362,7 +385,8 @@ let bootstrapParser = function () {
     if (tryConsume("*")) return new ZeroOrMoreSuffixNode();
     if (tryConsume("+")) return new OneOrMoreSuffixNode();
     if (tryConsume("?")) return new OptionalSuffixNode();
-    if (tryConsume("{")) {
+    if (match("{") && peek(1).rule == "number") {
+      consume("{");
       let lowerCount = consume("number").value;
       let isRange = false;
       let upperCount = null;
