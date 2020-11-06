@@ -2,7 +2,9 @@ grammar OPLanguageGrammar {
   grammar_head : "grammar" ident=ident "{" productions=grammar_definitions "}" {{ 
     return new GrammarNode({ident, productions});
   }} ;
-  grammar_definitions : (production)*;
+  grammar_definitions : 
+  (production)*
+  ;
   production : ident ":" rule_list;
   rule_list : rule ("|" rule)*;
   rule : component*;
