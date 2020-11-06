@@ -214,6 +214,7 @@ let bootstrapParser = function () {
     `?`,
     `+`,
     `~`,
+    `=`,
     "grammar",
   ];
   for (rule of rules) {
@@ -227,9 +228,26 @@ let bootstrapParser = function () {
       lexerBuilder.addIgnoreRule(...rule);
   }
   lexerBuilder.compile();
-  lexer = lexerBuilder.createLexer(read("parser.grammar"));
+  lexer = lexerBuilder.createLexer(read("parser.ogrammar"));
   function match(rule) {
-    return lexer.currentToken.rule == rule;
+    if (!Array.isArray(rule))
+      return lexer.currentToken.rule == rule;
+    log(lexer.currentToken.rule);
+    log(rule[0]);
+    if (lexer.currentToken.rule != rule[0])
+      return false;
+    log("here: " + JSON.stringify(rule));
+    for (let i = 1; i < rule.length; i++) {
+      log(i);
+      let peeked = lexer.peek(i);
+      log("peeked: ", peeked);
+      log(JSON.stringify(peeked, null, "  "));
+      log("peeked: ", peeked);
+      if (peeked.rule != rule[i]) {
+        return false;
+      }
+    }
+    return true;
   }
   function consume(rule) {
     let result = tryConsume(rule);
@@ -307,6 +325,11 @@ let bootstrapParser = function () {
     // Followset is | and ;
     if (match("|") || match(";") || match(")"))
       return null;
+    let label = null;
+    if (match(["ident", "="])) {
+      label = consume("ident").value;
+      consume("=");
+    }
     let element = parseElement();
     let suffixes = [];
     let suffix;
@@ -316,7 +339,7 @@ let bootstrapParser = function () {
     let postfixCodeblock;
     if (match("{"))
       postfixCodeblock = parseCodesegment();
-    return new ComponentNode({ predicate, prefixCodeBlock, postfixCodeblock, element, suffixes });
+    return new ComponentNode({ label, predicate, prefixCodeBlock, postfixCodeblock, element, suffixes });
   }
 
   // element: "~"? (terminal | "(" rule_list ")");

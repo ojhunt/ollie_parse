@@ -1,0 +1,93 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "OPGrammar",
+	"patterns": [
+		{
+			"include": "#keywords"
+		},
+		{
+			"include": "#strings"
+		},
+		{
+			"include": "#operators"
+		},
+		{
+			"include": "#grammar"
+		},
+		{
+			"include": "#production"
+		},
+		{
+			"include": "#assignment"
+		}
+	],
+	"repository": {
+		"keywords": {
+			"patterns": [
+				{
+					"name": "keyword.control.opg",
+					"match": "\\b(if|while|for|return)\\b"
+				}
+			]
+		},
+		"strings": {
+			"name": "string.quoted.double.opg",
+			"begin": "\"",
+			"end": "\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.opg",
+					"match": "\\\\."
+				}
+			]
+		},
+		"operators": {
+			"patterns": [
+				{
+					"name": "keyword.control",
+					"match": "(%|\\*|/|\\||-|\\+|\\?|;)"
+				},
+				{
+					"name": "keyword.operator.assignment.opg",
+					"match": ":"
+				}
+			]
+		},
+		"grammar": {
+			"match": "\\b(grammar)\\s+([a-zA-Z_][a-zA-Z_0-9]*)",
+			"captures": {
+				"1": {
+					"name": "keyword.control.opg"
+				},
+				"2": {
+					"name": "keyword.identifier.opg"
+				}
+			}
+		},
+		"production": {
+			"patterns": [
+				{
+					"match": "([a-zA-Z_][a-zA-Z_0-9]*)\\s*:",
+					"captures": {
+						"1": {
+							"name": "support.type"
+						}
+					}
+				}
+			]
+		},
+		"assignment": {
+			"patterns": [
+				{
+					"match": "([a-zA-Z_][a-zA-Z_0-9]*)\\s*=",
+					"captures": {
+						"1": {
+							"name": "support.variable"
+						}
+					}
+				}
+			]
+		}
+	},
+	"scopeName": "source.opg"
+}

@@ -1,0 +1,25 @@
+{
+    "name": "ollie-parse",
+    "displayName": "Ollie Parse",
+    "description": "Language support for opg grammars",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.50.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [{
+            "id": "opg",
+            "aliases": ["OPGrammar", "opg"],
+            "extensions": [".ogrammar"],
+            "configuration": "./language-configuration.json"
+        }],
+        "grammars": [{
+            "language": "opg",
+            "scopeName": "source.opg",
+            "path": "./syntaxes/opg.tmLanguage.json"
+        }]
+    }
+}
