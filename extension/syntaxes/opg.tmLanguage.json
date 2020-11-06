@@ -1,6 +1,8 @@
 {
 	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
 	"name": "OPGrammar",
+	"foldingStartMarker": ":",
+	"foldingStopMarker": ";",
 	"patterns": [
 		{
 			"include": "#keywords"
@@ -19,6 +21,9 @@
 		},
 		{
 			"include": "#assignment"
+		},
+		{
+			"include": "#codeblock"
 		}
 	],
 	"repository": {
@@ -45,7 +50,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control",
-					"match": "(%|\\*|/|\\||-|\\+|\\?|;)"
+					"match": "(%|\\*|/|\\||-|\\+|\\?)"
 				},
 				{
 					"name": "keyword.operator.assignment.opg",
@@ -65,14 +70,24 @@
 			}
 		},
 		"production": {
+			"begin": "([a-zA-Z_][a-zA-Z_0-9]*)\\s*(:)",
+			"end": "(;)",
+			"beginCaptures": {
+				"1": {
+					"name": "support.type"
+				},
+				"2": {
+					"name": "support.class"
+				}
+			},
+			"endCaptures": {
+				"1": {
+					"name": "support.class"
+				}
+			},
 			"patterns": [
 				{
-					"match": "([a-zA-Z_][a-zA-Z_0-9]*)\\s*:",
-					"captures": {
-						"1": {
-							"name": "support.type"
-						}
-					}
+					"include": "#rule-list"
 				}
 			]
 		},
@@ -85,6 +100,41 @@
 							"name": "support.variable"
 						}
 					}
+				}
+			]
+		},
+		"codeblock": {
+			"begin": "({{)",
+			"end": "(}})",
+			"beginCaptures": {
+				"1": {
+					"name": "keyword.operator.new"
+				}
+			},
+			"endCaptures": {
+				"1": {
+					"name": "keyword.operator.new"
+				}
+			},
+			"patterns": [
+				{
+					"include": "source.js"
+				}
+			]
+		},
+		"rule-list": {
+			"patterns": [
+				{
+					"include": "#strings"
+				},
+				{
+					"include": "#operators"
+				},
+				{
+					"include": "#codeblock"
+				},
+				{
+					"include": "#assignment"
 				}
 			]
 		}
