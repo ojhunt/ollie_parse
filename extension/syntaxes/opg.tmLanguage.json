@@ -3,8 +3,8 @@
 	"name": "OPGrammar",
 	"folding": {
 		"code": {
-			"start": "{{",
-			"end": "}}"
+			"start": "{\\s*[^0-9]",
+			"end": "}"
 		},
 		"productions": {
 			"start": ":",
@@ -29,9 +29,6 @@
 		},
 		{
 			"include": "#assignment"
-		},
-		{
-			"include": "#codeblock"
 		}
 	],
 	"repository": {
@@ -112,8 +109,8 @@
 			]
 		},
 		"codeblock": {
-			"begin": "({{)",
-			"end": "(}})",
+			"begin": "({)\\s*[^0-9]",
+			"end": "(})",
 			"beginCaptures": {
 				"1": {
 					"name": "keyword.operator.new"

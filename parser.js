@@ -195,7 +195,6 @@ let bootstrapParser = function () {
     ["string", /""|"[\S\s]*?[^\\]"/, text => JSON.parse(text)], // decodes the string literal *and* kills lexing if wrong. smooth.
     ["number", /[0-9]+(?![a-zA-Z_])/],
     ["ident", /[a-zA-Z_][a-zA-Z_0-9]*/],
-    ["action", /{{{.*?}}}/m],
     ["regex", /\[\]|\[[\S\s]*?[^\\]\]/],
     `"`,
     `'`,
@@ -203,8 +202,6 @@ let bootstrapParser = function () {
     `;`,
     `{`,
     `}`,
-    `{{`,
-    `}}`,
     `(`,
     `)`,
     `<`,
@@ -315,12 +312,12 @@ let bootstrapParser = function () {
   function parseComponent() {
     let predicate = null;
     let prefixCodeBlock = null;
-    if (match("{{")) {
+    if (match("{") && peek(1).rule != "number") {
       prefixCodeBlock = parseCodesegment();
       if (tryConsume("?")) {
         predicate = prefixCodeBlock;
         prefixCodeBlock = null;
-        if (match("{{"))
+        if (match("{") && peek(1).rule != "number")
           prefixCodeBlock = parseCodesegment();
       }
     }
