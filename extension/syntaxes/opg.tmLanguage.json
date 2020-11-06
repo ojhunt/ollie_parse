@@ -6,7 +6,7 @@
 			"start": "{{",
 			"end": "}}"
 		},
-		"production": {
+		"productions": {
 			"start": ":",
 			"end": ";"
 		}

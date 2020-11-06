@@ -2,14 +2,14 @@ grammar OPLanguageGrammar {
   grammar_head : "grammar" ident=ident "{" productions=grammar_definitions "}" {{ 
     return new GrammarNode({ident, productions});
   }} ;
-  grammar_definitions : 
-  (production)*
-  ;
+  grammar_definitions : productions=(production)* {{ return productions; }};
   production : ident ":" rule_list;
   rule_list : rule ("|" rule)*;
   rule : component*;
+
   component : (code_segment "?")? code_segment? ((ident "=")? element element_suffix*)?;
-  code_segment : "{{" (~"}}" | code_segment | )* "}}";
+  brace_pair : "{" (~"{" || brace_pair) "}";
+  code_segment : "{{" (~"{}")* "}}";
   element_suffix: "*" | "?" | "{" number ("," number)? "}";
   element : terminal | "(" [?~]? rule_list ")";
   terminal : ident | number | (string+) | set;

@@ -203,6 +203,8 @@ let bootstrapParser = function () {
     `;`,
     `{`,
     `}`,
+    `{{`,
+    `}}`,
     `(`,
     `)`,
     `<`,
@@ -313,12 +315,12 @@ let bootstrapParser = function () {
   function parseComponent() {
     let predicate = null;
     let prefixCodeBlock = null;
-    if (match("{")) {
+    if (match("{{")) {
       prefixCodeBlock = parseCodesegment();
       if (tryConsume("?")) {
         predicate = prefixCodeBlock;
         prefixCodeBlock = null;
-        if (match("{"))
+        if (match("{{"))
           prefixCodeBlock = parseCodesegment();
       }
     }
