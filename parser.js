@@ -225,7 +225,7 @@ let bootstrapParser = function () {
     }, // whitespace
     {
       name: "string",
-      rule: /""|"[\S\s]*?[^\\]"/,
+      rule: /"(?:[^"\\]|\\[\s\S])*"/,
       callback: text => JSON.parse(text)
     }, // decodes the string literal *and* kills lexing if wrong. smooth.
     {
@@ -271,14 +271,21 @@ let bootstrapParser = function () {
     },
     {
       name: "regex_source_character",
-      rule: /[0-9]/,
+      rule: /[0-9\-\\^$.*+?/(){}\[\]|]/,
       mode: "regex"
     },
     {
       name: "regex_flags",
-      rule: /[a-z]+/,
+      rule: /[a-zA-Z]+/,
       mode: "regex"
     },
+    {
+      name: "regex_pattern_character",
+      rule: /(?![-^$\\\.\*+?()\[\]{}|])[\S\s]/,
+      mode: "regex"
+    },
+    //regex_pattern_character: /(?![-^$\\\.\*+?()\[\]{}|])[\S\s]/
+
     "(",
     "(?!",
     "(?=",
@@ -286,21 +293,75 @@ let bootstrapParser = function () {
     "[",
     "]",
     "-",
-    "/"
+    "/",
+    "\\"
   ];
-  for (rule of rules) {
+  let codeblockRules = [
+    {
+      name: "comment",
+      rule: /\/\*([\s\S]*?\*\/)/m,
+      shouldIgnore: true,
+      mode: "codeblock"
+    }, // /*..*/ are multiline
+    {
+      name: "comment",
+      rule: /\/\/.*/,
+      shouldIgnore: true,
+      mode: "codeblock"
+    }, // not multiline regexp so this automatically works
+    {
+      name: "whitespace",
+      rule: /[\t\n\r ]/,
+      shouldIgnore: true,
+      mode: "codeblock"
+    }, // whitespace
+    {
+      name: "string",
+      rule: /""|"[\S\s]*?[^\\]"/,
+      mode: "codeblock"
+    },
+    {
+      name: "string",
+      rule: /''|'[\S\s]*?[^\\]'/,
+      mode: "codeblock"
+    },
+    {
+      name: "string",
+      rule: /``|`[\S\s]*?[^\\]`/,
+      mode: "codeblock"
+    },
+    {
+      name: "misc",
+      rule: /((?![{}])[\S()])+/,
+      mode: "codeblock"
+    },
+    "{",
+    "}"
+  ];
+  for (let rule of rules) {
     if (typeof rule == "string") {
       lexerBuilder.addRule({ name: rule, rule });
       continue;
     }
     lexerBuilder.addRule(rule);
   }
-  for (rule of regexRules) {
+  for (let rule of regexRules) {
     if (typeof rule == "string") {
       lexerBuilder.addRule({
         name: rule,
         rule,
         mode: "regex"
+      });
+      continue;
+    }
+    lexerBuilder.addRule(rule);
+  }
+  for (let rule of codeblockRules) {
+    if (typeof rule == "string") {
+      lexerBuilder.addRule({
+        name: rule,
+        rule,
+        mode: "codeblock"
       });
       continue;
     }
@@ -410,15 +471,27 @@ let bootstrapParser = function () {
   }
 
   function parseCodesegment() {
-    let startToken = consume("{");
-    let endToken;
+    if (!match("{")) throw "wat";
+    let startToken = lexer.currentTokens[0];
+    lexer.pushMode("codeblock");
+    lexer.next();
     let tokens = [];
     let depth = 1;
-    while (depth > 0 && lexer.hasNext()) {
-      if (tryConsume("{")) depth++;
-      else if (endToken = tryConsume("}")) depth--;
-      else lexer.next();
+    while (lexer.hasNext()) {
+      if (tryConsume("{")) {
+        depth++;
+      } else if (match("}")) {
+        depth--;
+        if (depth == 0)
+          break;
+        lexer.next();
+      } else {
+        lexer.next();
+      }
     }
+    lexer.popMode();
+    let endToken = lexer.currentTokens[0];
+    lexer.next();
     let code = lexer.getSubstring(startToken.offset + startToken.length, endToken.offset);
     return new CodeSegmentNode(code);
   }
@@ -443,11 +516,11 @@ let bootstrapParser = function () {
           break;
       }
       consume(")");
-      if (!wrapper(result)) throw "";
+      if (!wrapper(result)) lexer.$unexpectedToken("");
       return wrapper(result);
     }
     let terminal = parseTerminal();
-    if (!wrapper(terminal)) throw "";
+    if (!wrapper(terminal)) lexer.$unexpectedToken("");
     return wrapper(terminal);
   }
 
@@ -490,14 +563,24 @@ let bootstrapParser = function () {
 
   // regex: (?= "/")(?!"//") { lexer.pushMode("regex"); } "/"   regex_pattern "/" regex_flags ? { lexer.popMode() };
   function parseRegex() {
-    if (match("//")) throw "////////";
-    if (!match("/")) throw "error";
+    if (match("//")) lexer.$unexpectedToken("a");
+    if (!match("/")) lexer.$unexpectedToken("b");
     lexer.pushMode("regex");
     let start = consume("/");
+    let end;
+    let flags = "";
     parseRegexPattern();
-    let end = consume("/");
-    let flags = tryConsume("regex_flags");
+    if (match(["/", "regex_flags"])) {
+      end = consume("/");
+      // Use a peek to decide when to change mode
+      flags = "";
+    } else if (!match("/")) {
+      lexer.$unexpectedToken();
+    } else {
+      end = lexer.currentTokens[0];
+    }
     lexer.popMode();
+    lexer.next();
     let body = lexer.getSubstring(start.offset + 1, end.offset);
     return new RegExp(body, flags ? flags.text : "");
   }
