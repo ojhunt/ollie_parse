@@ -2,16 +2,37 @@ grammar OPLanguageGrammar {
   grammar_head : "grammar" ident=ident "{" productions=grammar_definitions "}" {
     return new GrammarNode({ident, productions});
   };
-  grammar_definitions : productions=(production)* {{ return productions; }};
+  grammar_definitions : productions=(production)* { return productions; };
   production : ident ":" rule_list;
   rule_list : rule ("|" rule)*;
   rule : component*;
 
   component : (code_segment "?")? code_segment? ((ident "=")? element element_suffix*)?;
   brace_pair : "{" (~"{" || brace_pair) "}";
-  code_segment : "{" ~([0-9]) (~"{}")* "}";
+  code_segment : (?!"{"/[0-9]/) { lexer.pushMode("codeblock"); } "{" (~"{}")* "}" { lexer.popMode(); };
   element_suffix: "*" | "?" | "{" number ("," number)? "}";
-  element : terminal | "(" [?~]? rule_list ")";
+  element : terminal | "(" "~" ? rule_list ")";
   terminal : ident | number | (string+) | set;
   set : regex;
+  // ECMA262 regex gramamr
+  regex: (?="/") (?!"//") { lexer.pushMode("regex") } "/"   regex_pattern "/" regex_flags? { lexer.popMode() };
+  regex_pattern : regex_disjunction;
+  regex_disjunction: regex_alternative+;
+  regex_alternative: regex_term*;
+  regex_term: regex_assertion | regex_atom regex_quantifier?;
+  regex_assertion: "^" | "$" | "\\b" | "\\B" | "(" "?=" regex_disjunction ")" | "(" "?!" regex_disjunction ")";
+  regex_quantifier: ("*" | "+" | "?" | "{" regex_decimal_digits ("," regex_decimal_digits ?) ? "}") "?" ?;
+  regex_atom: regex_pattern_character 
+            | "."
+            | "\\" regex_atom_escape
+            | regex_character_class
+            | "(" regex_disjunction ")"
+            | "(?" regex_disjunction ")"
+            ;
+  regex_pattern_character: /(?![-^$\\\.\*+?()\[\]{}|])[\S\s]/;
+  regex_atom_escape: /(?:[0-9]+)|(?:(?:[fnrtv])|(?:c[a-zA-Z])|(?:x[0-9a-fA-F]{2,2})|(?:u[0-9a-fA-F]{4,4})|(?:(?![0-9])[\W]))|(?:[dDsSwW])/;
+  regex_class_escape: regex_atom_escape | b ;
+  regex_character_class: "[" regex_class_range* "]";
+  regex_class_range: regex_class_atom ("-"? regex_class_range)*;
+  regex_class_atom: (?!/[\]\-]/) regex_source_character | "\\" regex_class_escape;
 } 

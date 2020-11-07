@@ -113,6 +113,18 @@ class CompoundElementNode extends ASTNode {
     this.rules = rules;
   }
 }
+class ForwardAssertionNode extends ASTNode {
+  constructor(rules) {
+    super();
+    this.rules = rules;
+  }
+}
+class NegativeAssertionNode extends ASTNode {
+  constructor(rules) {
+    super();
+    this.rules = rules;
+  }
+}
 class NegateElementNode extends ASTNode {
   constructor(node) {
     super();
@@ -187,6 +199,7 @@ class ParserGenerator {
     log(`Terminals: ${terminals.map(p => `'${p}'`)}`);
     let productions = ast.productions.map(p => p.name);
     log(`Productions: ${productions}`);
+
   }
 }
 
@@ -195,13 +208,32 @@ class ParserGenerator {
 let bootstrapParser = function () {
   let lexerBuilder = new LexerCompiler("OPLexer");
   let rules = [
-    ["comment", /\/\*([\s\S]*?\*\/)/m, null], // /*..*/ are multiline
-    ["comment", /\/\/.*/, null], // not multiline regexp so this automatically works
-    ["whitespace", /[\t\n\r ]/, null], // whitespace
-    ["string", /""|"[\S\s]*?[^\\]"/, text => JSON.parse(text)], // decodes the string literal *and* kills lexing if wrong. smooth.
-    ["number", /[0-9]+(?![a-zA-Z_])/],
-    ["ident", /[a-zA-Z_][a-zA-Z_0-9]*/],
-    ["regex", /\[\]|\[[\S\s]*?[^\\]\]/],
+    {
+      name: "comment",
+      rule: /\/\*([\s\S]*?\*\/)/m,
+      shouldIgnore: true
+    }, // /*..*/ are multiline
+    {
+      name: "comment",
+      rule: /\/\/.*/,
+      shouldIgnore: true
+    }, // not multiline regexp so this automatically works
+    {
+      name: "whitespace",
+      rule: /[\t\n\r ]/,
+      shouldIgnore: true
+    }, // whitespace
+    {
+      name: "string",
+      rule: /""|"[\S\s]*?[^\\]"/,
+      callback: text => JSON.parse(text)
+    }, // decodes the string literal *and* kills lexing if wrong. smooth.
+    {
+      name: "number", rule: /[0-9]+(?![a-zA-Z_])/
+    },
+    {
+      name: "ident", rule: /[a-zA-Z_][a-zA-Z_0-9]*/
+    },
     `"`,
     `'`,
     `"`,
@@ -209,6 +241,8 @@ let bootstrapParser = function () {
     `{`,
     `}`,
     `(`,
+    "(?!",
+    "(?=",
     `)`,
     `<`,
     `>`,
@@ -219,56 +253,81 @@ let bootstrapParser = function () {
     `?`,
     `+`,
     `~`,
+    `/`,
     `=`,
+    `?!`,
     "grammar",
+  ];
+  let regexRules = [
+    {
+      name: "regex_atom_escape",
+      rule: /(?:[0-9]+)|(?:(?:[fnrtv])|(?:c[a-zA-Z])|(?:x[0-9a-fA-F]{2,2})|(?:u[0-9a-fA-F]{4,4})|(?:(?![0-9])[\W]))|(?:[dDsSwW])/,
+      mode: "regex"
+    },
+    {
+      name: "regex_class_escape",
+      rule: /(?:[0-9]+)|(?:(?:[fnrtv])|(?:c[a-zA-Z])|(?:x[0-9a-fA-F]{2,2})|(?:u[0-9a-fA-F]{4,4})|(?:(?![0-9])[\W]))|(?:[dDsSwW])|b/,
+      mode: "regex"
+    },
+    {
+      name: "regex_source_character",
+      rule: /[0-9]/,
+      mode: "regex"
+    },
+    {
+      name: "regex_flags",
+      rule: /[a-z]+/,
+      mode: "regex"
+    },
+    "(",
+    "(?!",
+    "(?=",
+    ")",
+    "[",
+    "]",
+    "-",
+    "/"
   ];
   for (rule of rules) {
     if (typeof rule == "string") {
-      lexerBuilder.addRule(rule, rule);
+      lexerBuilder.addRule({ name: rule, rule });
       continue;
     }
-    if (rule[2] !== null)
-      lexerBuilder.addRule(...rule);
-    else
-      lexerBuilder.addIgnoreRule(...rule);
+    lexerBuilder.addRule(rule);
+  }
+  for (rule of regexRules) {
+    if (typeof rule == "string") {
+      lexerBuilder.addRule({
+        name: rule,
+        rule,
+        mode: "regex"
+      });
+      continue;
+    }
+    lexerBuilder.addRule(rule);
   }
   lexerBuilder.compile();
   lexer = lexerBuilder.createLexer(read("parser.ogrammar"));
   function match(rule) {
-    if (!Array.isArray(rule))
-      return lexer.currentToken.rule == rule;
-    log(lexer.currentToken.rule);
-    log(rule[0]);
-    if (lexer.currentToken.rule != rule[0])
-      return false;
-    log("here: " + JSON.stringify(rule));
-    for (let i = 1; i < rule.length; i++) {
-      log(i);
-      let peeked = lexer.peek(i);
-      log("peeked: ", peeked);
-      log(JSON.stringify(peeked, null, "  "));
-      log("peeked: ", peeked);
-      if (peeked.rule != rule[i]) {
-        return false;
-      }
-    }
-    return true;
+    return lexer.match(rule);
+  }
+  function matchAnyOf(terms) {
+    return lexer.matchAnyOf(terms);
   }
   function peek(lookahead) {
     return lexer.peek(lookahead);
   }
   function consume(rule) {
-    let result = tryConsume(rule);
-    if (!result)
-      throw `Unexpected token@${lexer.currentToken.position}. Expected '${rule}', found ${lexer.currentToken.rule}: '${lexer.currentToken.text}'`;
-    return result;
+    return lexer.consume(rule);
   }
   function tryConsume(rule) {
-    if (!match(rule))
-      return null;
-    let result = lexer.currentToken;
-    lexer.next();
-    return result;
+    return lexer.tryConsume(rule);
+  }
+  function tryConsumeAnyOf(terms) {
+    return lexer.tryConsumeAnyOf(terms);
+  }
+  function consumeAnyOf(terms) {
+    return lexer.consumeAnyOf(terms);
   }
 
   // grammar: "grammar" ident "{" grammar_definitions "}";
@@ -369,8 +428,20 @@ let bootstrapParser = function () {
     let wrapper = _ => _;
     if (tryConsume("~"))
       wrapper = n => new NegateElementNode(n);
-    if (tryConsume("(")) {
-      let result = new CompoundElementNode(parseRuleList());
+    let openCompound = tryConsumeAnyOf(["(", "(?!", "(?="]);
+    if (openCompound) {
+      let result;
+      switch (openCompound.rule) {
+        case "(":
+          result = new CompoundElementNode(parseRuleList());
+          break;
+        case "(?=":
+          result = new ForwardAssertionNode(parseRuleList());
+          break;
+        case "(?!":
+          result = new NegativeAssertionNode(parseRuleList());
+          break;
+      }
       consume(")");
       if (!wrapper(result)) throw "";
       return wrapper(result);
@@ -402,15 +473,129 @@ let bootstrapParser = function () {
       return new RangeSuffixNode({ lowerCount, upperCount });
     }
   }
-  // terminal: ident | number | string | set;
+  // terminal: ident | number | string | regex;
   function parseTerminal() {
-    switch (lexer.currentToken.rule) {
-      case "ident": return cachedTerminal(IdentTerminalNode, consume("ident").value);
-      case "number": return cachedTerminal(NumberTerminalNode, consume("number").value);
-      case "string": return cachedTerminal(StringTerminalNode, consume("string").value);
+    if (!matchAnyOf(["ident", "number", "string"]))
+      return parseRegex();
+    let token = consumeAnyOf(["ident", "number", "string"]);
+    switch (token.rule) {
+      case "ident":
+        return cachedTerminal(IdentTerminalNode, token.value);
+      case "number":
+        return cachedTerminal(NumberTerminalNode, token.value);
+      case "string":
+        return cachedTerminal(StringTerminalNode, token.value);
     }
-    return cachedTerminal(SetTerminalNode, consume("regex").value);
   }
+
+  // regex: (?= "/")(?!"//") { lexer.pushMode("regex"); } "/"   regex_pattern "/" regex_flags ? { lexer.popMode() };
+  function parseRegex() {
+    if (match("//")) throw "////////";
+    if (!match("/")) throw "error";
+    lexer.pushMode("regex");
+    let start = consume("/");
+    parseRegexPattern();
+    let end = consume("/");
+    let flags = tryConsume("regex_flags");
+    lexer.popMode();
+    let body = lexer.getSubstring(start.offset + 1, end.offset);
+    return new RegExp(body, flags ? flags.text : "");
+  }
+
+  // regex_pattern: regex_disjunction;
+  function parseRegexPattern() {
+    return parseRegexDisjunction();
+  }
+
+  // regex_disjunction: regex_alternative +;
+  function parseRegexDisjunction() {
+    while (!matchAnyOf([")", "/"]))
+      parseRegexTerm();
+  }
+  // regex_term: regex_assertion | regex_atom regex_quantifier ?;
+  function parseRegexTerm() {
+    if (matchAnyOf(["^", "$", "\\b", "\\B", "(?!", "(?="])) {
+      parseRegexAssertion();
+      return;
+    }
+    parseRegexAtom();
+    if (matchAnyOf(["*", "+", "?", "{"]))
+      parseRegexQuantifier();
+  }
+
+  // regex_assertion: "^" | "$" | "\\b" | "\\B" | "(?=" regex_disjunction ")" | "(?!" regex_disjunction ")";
+  function parseRegexAssertion() {
+    if (tryConsumeAnyOf(["^", "$", "\\b", "\\B"])) return;
+    consumeAnyOf(["(?!", "(?="]);
+    parseRegexDisjunction();
+    consume(")");
+  }
+  // regex_quantifier: ("*" | "+" | "?" | "{" regex_decimal_digits ("," regex_decimal_digits ?) ? "}") "?" ?;
+  function parseRegexQuantifier() {
+    if (tryConsumeAnyOf(["*", "+", "?"])) return;
+    consume("{");
+    consume("regex_decimal_digits");
+    if (tryConsume(","))
+      tryConsume("regex_decimal_digits");
+    consume("}");
+  }
+  // regex_atom: regex_pattern_character
+  //           | "."
+  //           | "\\" regex_atom_escape
+  //           | regex_character_class
+  //           | "(" regex_disjunction ")"
+  //           | "(?" regex_disjunction ")"
+  //           ;
+  // First(regex_atom): . \ ( [ 
+  function parseRegexAtom() {
+    // regex_pattern_character: /(?![-^$\\\.\*+?()\[\]{}|])[\S\s]/;
+    if (tryConsume("regex_pattern_character"))
+      return;
+    if (tryConsume("."))
+      return;
+    if (tryConsume("\\")) {
+      // regex_atom_escape: /(?:[0-9]+)|(?:(?:[fnrtv])|(?:c[a-zA-Z])|(?:x[0-9a-fA-F]{2,2})|(?:u[0-9a-fA-F]{4,4})|(?:(?![0-9])[\W]))|(?:[dDsSwW])/;
+      consume("regex_atom_escape");
+      return;
+    }
+    if (match("[")) {
+      parseRegexCharacterClass();
+      return;
+    }
+    consumeAnyOf(["(", "(?"]);
+    parseRegexDisjunction();
+    consume(")");
+  }
+
+  // regex_character_class: "[" regex_class_range * "]";
+  function parseRegexCharacterClass() {
+    consume("[");
+    while (!match("]")) {
+      parseRegexClassRange();
+    }
+    consume("]");
+  }
+
+  // regex_class_range: regex_class_atom("-" ? regex_class_range) *;
+  function parseRegexClassRange() {
+    parseRegexClassAtom();
+    while (matchAnyOf(["-", "regex_source_character", "\\"]) && !match("]")) {
+      tryConsume("-");
+      parseRegexClassAtom();
+    }
+  }
+
+  // regex_class_atom: (?!/[\]\-]/) regex_source_character | "\\" regex_class_escape;
+  // regex_class_escape: regex_atom_escape | b;
+  function parseRegexClassAtom() {
+    if (tryConsume("\\")) {
+      consume("regex_class_escape");
+      return;
+    }
+    consume("regex_source_character");
+  }
+
+
   let terminalCache = new Map;
   function cachedTerminal(nodeConstructor, value) {
     let theCache = terminalCache.get(nodeConstructor);
