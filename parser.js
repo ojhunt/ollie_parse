@@ -271,12 +271,12 @@ let bootstrapParser = function () {
     },
     {
       name: "regex_source_character",
-      rule: /[0-9\-\\^$.*+?/(){}\[\]|]/,
+      rule: /[\w\-\\^$.*+?/(){}\[\]|]/,
       mode: "regex"
     },
     {
-      name: "regex_flags",
-      rule: /[a-zA-Z]+/,
+      name: "regex_flag",
+      rule: /[a-zA-Z]/,
       mode: "regex"
     },
     {
@@ -284,17 +284,35 @@ let bootstrapParser = function () {
       rule: /(?![-^$\\\.\*+?()\[\]{}|])[\S\s]/,
       mode: "regex"
     },
+    {
+      name: "regex_disjunction_head",
+      rule: /(?:\((?:\?[=!])?)/,
+      mode: "regex"
+    },
+    {
+      name: "regex_decimal_digits",
+      rule: /[0-9]+/,
+      mode: "regex"
+    },
     //regex_pattern_character: /(?![-^$\\\.\*+?()\[\]{}|])[\S\s]/
 
     "(",
     "(?!",
     "(?=",
+    "(?:",
     ")",
     "[",
     "]",
     "-",
     "/",
-    "\\"
+    "\\",
+    "+",
+    "*",
+    "?",
+    "{",
+    "}",
+    "|",
+    ","
   ];
   let codeblockRules = [
     {
@@ -404,7 +422,7 @@ let bootstrapParser = function () {
   // grammar_definitions: (production) *
   function parseGrammarDefinitions() {
     let rules = [];
-    while (lexer.hasNext()) {
+    while (match("ident")) {
       rules.push(parseProduction());
     }
     return rules;
@@ -561,26 +579,32 @@ let bootstrapParser = function () {
     }
   }
 
-  // regex: (?= "/")(?!"//") { lexer.pushMode("regex"); } "/"   regex_pattern "/" regex_flags ? { lexer.popMode() };
+  // regex: (?= "/")(?!"//") { lexer.pushMode("regex"); } "/"   regex_pattern "/" regex_flag* { lexer.popMode() };
   function parseRegex() {
     if (match("//")) lexer.$unexpectedToken("a");
     if (!match("/")) lexer.$unexpectedToken("b");
     lexer.pushMode("regex");
     let start = consume("/");
     let end;
-    let flags = "";
+    let flags = null;
     parseRegexPattern();
-    if (match(["/", "regex_flags"])) {
+    if (match(["/", "regex_flag"])) {
       end = consume("/");
       // Use a peek to decide when to change mode
-      flags = "";
+      flags = [];
+      while (peek(1).rule == "regex_flag") {
+        flags.push(match("regex_flag"));
+        lexer.next();
+      }
+      lexer.popMode();
+      flags.push(consume("regex_flag"));
     } else if (!match("/")) {
-      lexer.$unexpectedToken();
+      lexer.$unexpectedToken("/");
     } else {
       end = lexer.currentTokens[0];
+      lexer.popMode();
+      lexer.next();
     }
-    lexer.popMode();
-    lexer.next();
     let body = lexer.getSubstring(start.offset + 1, end.offset);
     return new RegExp(body, flags ? flags.text : "");
   }
@@ -590,14 +614,20 @@ let bootstrapParser = function () {
     return parseRegexDisjunction();
   }
 
-  // regex_disjunction: regex_alternative +;
+  // regex_disjunction: regex_alternative ("|" regex_alternative) *;
   function parseRegexDisjunction() {
-    while (!matchAnyOf([")", "/"]))
+    do {
+      parseRegexAlternative();
+    } while (tryConsume("|"));
+  }
+  // regex_alternative: regex_term*;
+  function parseRegexAlternative() {
+    while (!matchAnyOf(["|", ")", "/"]))
       parseRegexTerm();
   }
   // regex_term: regex_assertion | regex_atom regex_quantifier ?;
   function parseRegexTerm() {
-    if (matchAnyOf(["^", "$", "\\b", "\\B", "(?!", "(?="])) {
+    if (matchAnyOf(["^", "$", "\\b", "\\B", "regex_disjunction_head"])) {
       parseRegexAssertion();
       return;
     }
@@ -645,7 +675,7 @@ let bootstrapParser = function () {
       parseRegexCharacterClass();
       return;
     }
-    consumeAnyOf(["(", "(?"]);
+    consumeAnyOf(["(", "(?:"]);
     parseRegexDisjunction();
     consume(")");
   }

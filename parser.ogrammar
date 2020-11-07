@@ -1,4 +1,5 @@
 grammar OPLanguageGrammar {
+  t: /[frtv]/;
   grammar_head : "grammar" ident=ident "{" productions=grammar_definitions "}" {
     return new GrammarNode({ident, productions});
   };
@@ -15,9 +16,9 @@ grammar OPLanguageGrammar {
   terminal : ident | number | (string+) | set;
   set : regex;
   // ECMA262 regex gramamr
-  regex: (?="/") (?!"//") { lexer.pushMode("regex") } "/"   regex_pattern "/" regex_flags? { lexer.popMode() };
+  regex: (?="/") (?!"//") { lexer.pushMode("regex") } "/"   regex_pattern "/" regex_flags* { lexer.popMode() };
   regex_pattern : regex_disjunction;
-  regex_disjunction: regex_alternative+;
+  regex_disjunction: regex_alternative ( "|" regex_alternative)*;
   regex_alternative: regex_term*;
   regex_term: regex_assertion | regex_atom regex_quantifier?;
   regex_assertion: "^" | "$" | "\\b" | "\\B" | "(" "?=" regex_disjunction ")" | "(" "?!" regex_disjunction ")";

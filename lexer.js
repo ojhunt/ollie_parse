@@ -48,6 +48,8 @@ class Token {
     return this.source.position(this.offset);
   }
 }
+if (typeof assert)
+  assert = (c, m) => { if (!c) throw new Error(m); };
 class LexerCompiler {
 
   constructor({ name, unicode = true }) {
@@ -214,9 +216,9 @@ class Lexer {
     if (!Array.isArray(rule)) {
       for (let token of this.$currentTokens) {
         if (token.rule == rule)
-          return true;
+          return token;
       }
-      return false;
+      return null;
     }
     let lookahead = [this.$currentTokens];
     if (rule.length > 1) {
@@ -224,15 +226,19 @@ class Lexer {
         lookahead.push(lexer.peek(i));
       }
     }
+    let match = null;
     // we now have an array of possible tokens
     // at each point
     for (let i = 0; i < lookahead.length; i++) {
-      if (!lookahead[i].find(t => t.rule === rule[i]))
-        return false;
+      let result = lookahead[i].find(t => t.rule === rule[i]);
+      if (!result)
+        return null;
+      if (i == 0) match = result;
     }
-    return true;
+    return match;
   }
   matchAnyOf(terms) {
+    assert(Array.isArray(terms), "must be array");
     for (let term of terms) {
       if (this.match(term))
         return true;
@@ -251,6 +257,7 @@ class Lexer {
   }
 
   tryConsumeAnyOf(rules) {
+    assert(Array.isArray(rules), "must be array");
     let alternatives = [];
     for (let rule of rules) {
       for (let token of this.$currentTokens) {
@@ -268,6 +275,7 @@ class Lexer {
     return alternatives[0];
   }
   consumeAnyOf(rules) {
+    assert(Array.isArray(rules), "must be array");
     let result = this.tryConsumeAnyOf(rules);
     if (result) return result;
     this.$unexpectedToken(rules);
@@ -276,4 +284,4 @@ class Lexer {
   tryConsume(rule) {
     return this.tryConsumeAnyOf([rule]);
   }
-}
+};
