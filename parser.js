@@ -34,7 +34,7 @@ print = null;
 class Visitor {
   visitStringTerminalNode(node) { }
   visitIdentTerminalNode(node) { }
-  visitSetTerminalNode(node) { }
+  visitRegexTerminalNode(node) { }
   visitGrammarNode(node) {
     for (let production of node.productions)
       production.visit(this);
@@ -63,6 +63,14 @@ class Visitor {
   visitNegateElementNode(node) {
     node.node.visit(this);
   }
+  visitNegativeAssertionNode(node) {
+    for (let rule of node.rules)
+      rule.visit(this);
+  }
+  visitForwardAssertionNode(node) {
+    for (let rule of node.rules)
+      rule.visit(this);
+  }
 }
 
 class ASTNode {
@@ -73,23 +81,25 @@ class ASTNode {
     visitor[`visit${this.nodeName}`](this);
   }
 }
-class StringTerminalNode extends ASTNode {
-  constructor(value) {
-    super();
-    this.value = value;
-  }
-}
-class IdentTerminalNode extends ASTNode {
-  constructor(value) {
-    super();
-    this.value = value;
-  }
+class TerminalNode extends ASTNode {
 
 }
-class SetTerminalNode extends ASTNode {
+class StringTerminalNode extends TerminalNode {
   constructor(value) {
     super();
     this.value = value;
+  }
+}
+class IdentTerminalNode extends TerminalNode {
+  constructor(value) {
+    super();
+    this.value = value;
+  }
+}
+class RegexTerminalNode extends TerminalNode {
+  constructor(regex) {
+    super();
+    this.value = regex;
   }
 }
 
@@ -188,7 +198,7 @@ class ParserGenerator {
       visitIdentTerminalNode(node) {
         this.terminalSet.add(node);
       }
-      visitSetTerminalNode(node) {
+      visitRegexTerminalNode(node) {
         this.terminalSet.add(node);
       }
       get terminals() { return [...this.terminalSet]; }
@@ -606,7 +616,7 @@ let bootstrapParser = function () {
       lexer.next();
     }
     let body = lexer.getSubstring(start.offset + 1, end.offset);
-    return new RegExp(body, flags ? flags.text : "");
+    return new RegexTerminalNode(new RegExp(body, flags ? flags.text : ""));
   }
 
   // regex_pattern: regex_disjunction;
