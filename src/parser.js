@@ -213,9 +213,7 @@ class ParserGenerator {
   }
 }
 
-
-
-let bootstrapParser = function () {
+function manualParseGrammar(source) {
   let lexerBuilder = new LexerCompiler("OPLexer");
   let rules = [
     {
@@ -253,6 +251,7 @@ let bootstrapParser = function () {
     `(`,
     "(?!",
     "(?=",
+    "(?:",
     `)`,
     `<`,
     `>`,
@@ -296,7 +295,7 @@ let bootstrapParser = function () {
     },
     {
       name: "regex_disjunction_head",
-      rule: /(?:\((?:\?[=!])?)/,
+      rule: /(?:\((?:\?[=!]))/,
       mode: "regex"
     },
     {
@@ -396,7 +395,7 @@ let bootstrapParser = function () {
     lexerBuilder.addRule(rule);
   }
   lexerBuilder.compile();
-  lexer = lexerBuilder.createLexer(read("parser.ogrammar"));
+  lexer = lexerBuilder.createLexer(source);
   function match(rule) {
     return lexer.match(rule);
   }
@@ -736,7 +735,10 @@ let bootstrapParser = function () {
   let grammarAST = parseGrammar();
   log(JSON.stringify(grammarAST, null, "  "));
   let generator = new ParserGenerator(grammarAST);
-}();
+};
+
+
+
 function assert(e) {
   if (!e) throw "assertion failed";
 }
